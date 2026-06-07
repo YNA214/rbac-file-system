@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8"><title>文件管理器</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+</head>
+<body style="background: #f0f2f5;">
+<nav class="navbar navbar-dark bg-dark"><div class="container-fluid"><span class="navbar-brand">RBAC 文件管理系统</span><div class="d-flex"><span class="text-light me-3" id="userInfo"></span><a href="/" class="btn btn-outline-warning btn-sm me-2">管理后台</a><a href="/audit-log" class="btn btn-outline-info btn-sm me-2">日志</a><button class="btn btn-outline-light btn-sm" onclick="logout()">退出</button></div></div></nav>
+<div class="container-fluid mt-3"><div class="row">
+<div class="col-md-3"><div class="card"><div class="card-header">我的角色</div><div class="card-body" id="roleInfo">加载中...</div></div></div>
+<div class="col-md-9">
+<div class="d-flex justify-content-between mb-2"><h4>文件列表</h4><button class="btn btn-primary btn-sm" id="btnUpload" onclick="showUpload()">上传文件</button></div>
+<table class="table table-striped"><thead class="table-dark"><tr><th>ID</th><th>文件名</th><th>大小</th><th>时间</th><th>操作</th></tr></thead><tbody id="fileList"><tr><td colspan="5">加载中...</td></tr></tbody></table>
+</div></div></div>
+<div class="modal fade" id="uploadModal"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5>上传文件</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="file" id="fileInput" class="form-control"><div id="uploadError" class="text-danger mt-2"></div></div><div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" onclick="uploadFile()">上传</button></div></div></div></div>
+<div class="modal fade" id="editModal"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 id="editTitle">文件</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="text" id="editFilename" class="form-control mb-2" placeholder="文件名"><textarea id="editContent" class="form-control" rows="15" placeholder="内容"></textarea></div><div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">关闭</button><button class="btn btn-primary" id="btnSave" onclick="saveFile()">保存</button></div></div></div></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const token = localStorage.getItem('token');
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+if (!token) window.location.href = '/login';
+const roleNames = (user.roles || []).map(r => (r.name || r).toLowerCase());
+const isAdmin = roleNames.includes('admin');
+const isGuest = roleNames.includes('guest') && !isAdmin;
+const canDownload = !isGuest;
+document.getElementById('userInfo').textContent = user.username || '未知';
+document.getElementById('roleInfo').innerHTML = roleNames.map(r => '<span class="badge bg-info me-1">' + r + '</span>').join('') || '未获取';
+if (isGuest) document.getElementById('btnUpload').style.display = 'none';
+let currentFileId = null;
+loadFiles();
+
+async function api(url, options = {}) {
+    options.headers = { ...options.headers, 'Authorization': 'Bearer ' + token };
+    return fetch('/api/v1' + url, options);
+}
+async function loadFiles() {
+    const tbody = document.getElementById('fileList');
+    if (isGuest) { tbody.innerHTML = '<tr><td colspan="5" class="text-danger">无访问权限</td></tr>'; return; }
+    try {
+        const resp = await api('/file/');
+        if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="5" class="text-danger">加载失败</td></tr>'; return; }
+        const data = await resp.json();
+        const ids = data.ids || [];
+        const files = data.result || [];
+        if (!files.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-muted">暂无文件</td></tr>'; return; }
+        tbody.innerHTML = files.map((f, i) => {
+            const fid = ids[i];
+            let btns = '<button class="btn btn-sm btn-outline-info me-1" onclick="viewFile(' + fid + ')">查看</button>';
+            if (canDownload) {
+                btns += '<button class="btn btn-sm btn-outline-primary me-1" onclick="downloadFile(' + fid + ')">下载</button>' +
+                        '<button class="btn btn-sm btn-outline-success me-1" onclick="shareFile(' + fid + ')">分享</button>';
+            }
+            if (isAdmin) btns += '<button class="btn btn-sm btn-outline-warning me-1" onclick="editFile(' + fid + ')">编辑</button>' +
+                        '<button class="btn btn-sm btn-outline-danger" onclick="deleteFile(' + fid + ')">删除</button>';
+            return '<tr><td>' + fid + '</td><td>' + f.filename + '</td><td>' + f.file_size + ' B</td><td>' + (f.created_at||'') + '</td><td>' + btns + '</td></tr>';
+        }).join('');
+    } catch(e) { tbody.innerHTML = '<tr><td colspan="5" class="text-danger">错误</td></tr>'; }
+}
+async function viewFile(id) {
+    const resp = await api('/file/' + id);
+    if (!resp.ok) { alert('查看失败'); return; }
+    const data = await resp.json();
+    const r = data.result || data;
+    document.getElementById('editTitle').textContent = '查看: ' + (r.filename || '');
+    document.getElementById('editFilename').value = r.filename || '';
+    document.getElementById('editContent').value = r.content || '';
+    document.getElementById('btnSave').style.display = isAdmin ? 'inline-block' : 'none';
+    document.getElementById('editFilename').readOnly = !isAdmin;
+    document.getElementById('editContent').readOnly = !isAdmin;
+    currentFileId = id;
+    new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+async function editFile(id) { viewFile(id); }
+async function saveFile() {
+    if (!isAdmin) { alert('无权限'); return; }
+    const filename = document.getElementById('editFilename').value;
+    const content = document.getElementById('editContent').value;
+    const resp = await api('/file/' + currentFileId, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({filename, content, file_size: content.length}) });
+    if (resp.ok) { alert('保存成功'); location.reload(); }
+    else { const e = await resp.json().catch(()=>({message:'保存失败'})); alert(e.message); }
+}
+function showUpload() { document.getElementById('uploadError').textContent = ''; new bootstrap.Modal(document.getElementById('uploadModal')).show(); }
+async function uploadFile() {
+    const f = document.getElementById('fileInput').files[0];
+    if (!f) { alert('请选择文件'); return; }
+    const fd = new FormData(); fd.append('file', f);
+    const resp = await api('/file/upload', { method: 'POST', body: fd });
+    const data = await resp.json().catch(()=>({message:'上传失败'}));
+    if (resp.ok) { alert('上传成功'); location.reload(); }
+    else { document.getElementById('uploadError').textContent = data.message || '上传失败'; }
+}
+function downloadFile(id) { window.open('/api/v1/file/' + id + '/download?access_token=' + token, '_blank'); }
+async function shareFile(id) {
+    const resp = await api('/file/' + id + '/share', { method: 'POST' });
+    const data = await resp.json();
+    if (resp.ok) {
+        const shareUrl = window.location.origin + data.share_url;
+        await navigator.clipboard.writeText(shareUrl);
+        alert('分享链接已复制！\n' + shareUrl);
+    } else {
+        alert(data.message || '分享失败');
+    }
+}
+async function deleteFile(id) {
+    if (!isAdmin) { alert('无权限'); return; }
+    if (!confirm('确定删除？')) return;
+    const resp = await api('/file/' + id, { method: 'DELETE' });
+    const data = await resp.json().catch(()=>({message:'删除失败'}));
+    if (resp.ok) { alert('删除成功'); loadFiles(); }
+    else { alert(data.message || '删除失败'); }
+}
+function logout() { localStorage.clear(); window.location.href = '/login'; }
+</script>
+</body>
+</html>
