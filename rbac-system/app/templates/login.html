@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>登录 - RBAC 文件管理系统</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-4">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h3 class="text-center mb-4">文件管理系统</h3>
+                        <form id="loginForm">
+                            <div class="mb-3"><label>用户名</label><input type="text" id="username" class="form-control" required></div>
+                            <div class="mb-3"><label>密码</label><input type="password" id="password" class="form-control" required></div>
+                            <button type="submit" class="btn btn-primary w-100">登录</button>
+                        </form>
+                        <div id="error" class="text-danger mt-2"></div>
+                        <div class="mt-2 text-center"><a href="/register">没有账号？去注册</a></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            document.getElementById('error').textContent = '';
+            try {
+                const resp = await fetch('/api/v1/security/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, provider: 'db' })
+                });
+                const data = await resp.json();
+                if (resp.ok && data.access_token) {
+                    localStorage.setItem('token', data.access_token);
+                    const roleResp = await fetch('/api/v1/user/roles', {
+                        headers: { 'Authorization': 'Bearer ' + data.access_token }
+                    });
+                    const roleData = await roleResp.json();
+                    localStorage.setItem('user', JSON.stringify({
+                        username: username,
+                        roles: (roleData.roles || []).map(r => ({ name: r }))
+                    }));
+                    window.location.href = '/file-manager';
+                } else {
+                    document.getElementById('error').textContent = data.message || '登录失败';
+                }
+            } catch(e) {
+                document.getElementById('error').textContent = '网络错误';
+            }
+        });
+    </script>
+</body>
+</html>

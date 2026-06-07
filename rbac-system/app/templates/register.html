@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>注册 - RBAC 文件管理系统</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-4">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h3 class="text-center mb-4">用户注册</h3>
+                        <form id="registerForm">
+                            <div class="mb-3"><label>用户名</label><input type="text" id="username" class="form-control" required></div>
+                            <div class="mb-3"><label>邮箱</label><input type="email" id="email" class="form-control" required></div>
+                            <div class="mb-3"><label>密码</label><input type="password" id="password" class="form-control" required></div>
+                            <div class="mb-3"><label>确认密码</label><input type="password" id="confirm" class="form-control" required></div>
+                            <button type="submit" class="btn btn-primary w-100">注册</button>
+                        </form>
+                        <div id="error" class="text-danger mt-2"></div>
+                        <div class="mt-2 text-center"><a href="/login">已有账号？去登录</a></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const confirm = document.getElementById('confirm').value;
+            const err = document.getElementById('error');
+            
+            if (password !== confirm) { err.textContent = '两次密码不一致'; return; }
+            if (password.length < 8) { err.textContent = '密码至少8位'; return; }
+            if (!/[A-Z]/.test(password)) { err.textContent = '密码需包含大写字母'; return; }
+            if (!/[a-z]/.test(password)) { err.textContent = '密码需包含小写字母'; return; }
+            if (!/[0-9]/.test(password)) { err.textContent = '密码需包含数字'; return; }
+            
+            try {
+                const resp = await fetch('/api/v1/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, email, password})
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    alert('注册成功！请登录');
+                    window.location.href = '/login';
+                } else {
+                    err.textContent = data.message || '注册失败';
+                }
+            } catch(e) {
+                err.textContent = '网络错误';
+            }
+        });
+    </script>
+</body>
+</html>
