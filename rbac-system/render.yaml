@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: rbac-system
+    runtime: python
+    rootDir: rbac-system
+    buildCommand: pip install flask-appbuilder flask-sqlalchemy pymysql cryptography pyopenssl PyJWT gunicorn
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rbac-db
+          property: connectionString
+      - key: SECRET_KEY
+        value: rbac-secret-2026
+
+databases:
+  - name: rbac-db
+    plan: free
