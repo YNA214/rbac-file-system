@@ -4,3 +4,5 @@ pymysql
 cryptography
 pyopenssl
 PyJWT
+gunicorn
+mysqlclient
